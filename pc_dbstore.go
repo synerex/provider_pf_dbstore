@@ -105,9 +105,13 @@ func dbStore(ts time.Time, mac string, hostname string, sid uint32, dir string, 
 	}
 
 	hexmac := strings.Replace(mac, ":", "", -1)
+	nummac, err := strconv.ParseUint(hexmac, 16, 64)
+    if err != nil {
+        panic(err)
+    }
 
 	log.Printf("Storeing %v, %s, %s, %d, %s, %d", ts.Format(layout_db), hexmac, hostname, sid, dir, height)
-	result, err := db.Exec(`insert into pc(time, mac, hostname, sid, dir, height) values(?, x'?', ?, ?, ?, ?)`, ts.Format(layout_db), hexmac, hostname, sid, dir, height)
+	result, err := db.Exec(`insert into pc(time, mac, hostname, sid, dir, height) values(?, ?, ?, ?, ?, ?)`, ts.Format(layout_db), nummac, hostname, sid, dir, height)
 
 	if err != nil {
 		print("exec error: ")
