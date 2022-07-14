@@ -11,11 +11,10 @@ import (
 
 	"database/sql"
 
+	protoPF "github.com/UCLabNU/proto_pflow"
 	_ "github.com/go-sql-driver/mysql"
-	protoPC "github.com/synerex/proto_pcounter"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
 	api "github.com/synerex/synerex_api"
 	pbase "github.com/synerex/synerex_proto"
 
@@ -35,15 +34,15 @@ var (
 	version         = "0.01"
 	baseDir         = "store"
 	dataDir         string
-	pcMu            *sync.Mutex = nil
-	pcLoop          *bool       = nil
+	pfMu            *sync.Mutex = nil
+	pfLoop          *bool       = nil
 	ssMu            *sync.Mutex = nil
 	ssLoop          *bool       = nil
 	sxServerAddress string
 	currentNid      uint64                  = 0 // NotifyDemand message ID
 	mbusID          uint64                  = 0 // storage MBus ID
 	storageID       uint64                  = 0 // storageID
-	pcClient        *sxutil.SXServiceClient = nil
+	pfClient        *sxutil.SXServiceClient = nil
 	db              *sql.DB
 	db_host         = os.Getenv("MYSQL_HOST")
 	db_name         = os.Getenv("MYSQL_DATABASE")
@@ -75,9 +74,9 @@ func init() {
 	}
 
 	// create table
-	_, err = db.Exec(`create table if not exists pc(id BIGINT unsigned not null auto_increment, time DATETIME(3) not null, mac BIGINT unsigned not null, hostname VARCHAR(24) not null, sid INT unsigned not null, dir CHAR(2) not null, height INT unsigned not null, primary key(id))`)
+	_, err = db.Exec(`create table if not exists pf(id BIGINT unsigned not null auto_increment, time DATETIME(3) not null, mac BIGINT unsigned not null, hostname VARCHAR(24) not null, sid INT unsigned not null, dir CHAR(2) not null, height INT unsigned not null, primary key(id))`)
 	// select hex(mac) from log;
-	// insert into pc (mac) values (x'000CF15698AD');
+	// insert into pf (mac) values (x'000CF15698AD');
 	if err != nil {
 		print("exec error: ")
 		print(err)
@@ -106,12 +105,12 @@ func dbStore(ts time.Time, mac string, hostname string, sid uint32, dir string, 
 
 	hexmac := strings.Replace(mac, ":", "", -1)
 	nummac, err := strconv.ParseUint(hexmac, 16, 64)
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
 	log.Printf("Storeing %v, %s, %s, %d, %s, %d", ts.Format(layout_db), hexmac, hostname, sid, dir, height)
-	result, err := db.Exec(`insert into pc(time, mac, hostname, sid, dir, height) values(?, ?, ?, ?, ?, ?)`, ts.Format(layout_db), nummac, hostname, sid, dir, height)
+	result, err := db.Exec(`insert into pf(time, mac, hostname, sid, dir, height) values(?, ?, ?, ?, ?, ?)`, ts.Format(layout_db), nummac, hostname, sid, dir, height)
 
 	if err != nil {
 		print("exec error: ")
@@ -129,38 +128,32 @@ func dbStore(ts time.Time, mac string, hostname string, sid uint32, dir string, 
 }
 
 // called for each agent data.
-func supplyPCountCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
+func supplyPFlowCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
 
-	if sp.SupplyName == "PCounter" {
-		pc := &protoPC.PCounter{}
-		err := proto.Unmarshal(sp.Cdata.Entity, pc)
+	if sp.SupplyName == "PFlow Supply" {
+		pf := &protoPF.PFlow{}
+		err := proto.Unmarshal(sp.Cdata.Entity, pf)
 		if err == nil {
-			sliceHostname := strings.Split(pc.Hostname, "-vc3d-")
-			sid, _ := strconv.Atoi(sliceHostname[0])
-			for _, v := range pc.Data {
-				if v.Typ == "counter" && v.Id == "1" {
-					ts, _ := time.Parse(layout, ptypes.TimestampString(v.Ts))
-					dbStore(ts, pc.Mac, pc.Hostname, uint32(sid), v.Dir, v.Height)
-				}
-			}
+			dbStore(pf.Operation[0].Timestamp.AsTime(), uint32(pf.Operation[0].Sid), uint32(pf.Operation[0].Height), pf.Operation[1].Timestamp.AsTime(), uint32(pf.Operation[1].Sid), uint32(pf.Operation[1].Height))
 		} else {
-			log.Printf("Unmarshaling err PC: %v", err)
+			log.Printf("Unmarshaling err PF: %v", err)
 		}
 	} else {
 		log.Printf("Received Unknown (%4d bytes)", len(sp.Cdata.Entity))
 	}
+
 }
 
 func main() {
 	flag.Parse()
 	go sxutil.HandleSigInt()
 	sxutil.RegisterDeferFunction(sxutil.UnRegisterNode)
-	log.Printf("PC-dbstore(%s) built %s sha1 %s", sxutil.GitVer, sxutil.BuildTime, sxutil.Sha1Ver)
+	log.Printf("PF-dbstore(%s) built %s sha1 %s", sxutil.GitVer, sxutil.BuildTime, sxutil.Sha1Ver)
 
-	channelTypes := []uint32{pbase.PEOPLE_WT_SVC, pbase.STORAGE_SERVICE}
+	channelTypes := []uint32{pbase.PEOPLE_FLOW_SVC, pbase.STORAGE_SERVICE}
 
 	var rerr error
-	sxServerAddress, rerr = sxutil.RegisterNode(*nodesrv, "PCdbstore", channelTypes, nil)
+	sxServerAddress, rerr = sxutil.RegisterNode(*nodesrv, "PFdbStore", channelTypes, nil)
 
 	if rerr != nil {
 		log.Fatal("Can't register node:", rerr)
@@ -178,10 +171,10 @@ func main() {
 		log.Fatal("Can't connect Synerex Server")
 	}
 
-	pcClient = sxutil.NewSXServiceClient(client, pbase.PEOPLE_COUNTER_SVC, "{Client:PCdbStore}")
+	pfClient = sxutil.NewSXServiceClient(client, pbase.PEOPLE_FLOW_SVC, "{Client:PFdbStore}")
 
-	log.Print("Subscribe PCount Supply")
-	pcMu, pcLoop = sxutil.SimpleSubscribeSupply(pcClient, supplyPCountCallback)
+	log.Print("Subscribe PFount Supply")
+	pfMu, pfLoop = sxutil.SimpleSubscribeSupply(pfClient, supplyPFlowCallback)
 
 	wg.Add(1)
 	wg.Wait()
