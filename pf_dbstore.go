@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"database/sql"
@@ -74,7 +72,7 @@ func init() {
 	}
 
 	// create table
-	_, err = db.Exec(`create table if not exists pf(id BIGINT unsigned not null auto_increment, time DATETIME(3) not null, mac BIGINT unsigned not null, hostname VARCHAR(24) not null, sid INT unsigned not null, dir CHAR(2) not null, height INT unsigned not null, primary key(id))`)
+	_, err = db.Exec(`create table if not exists pf(id BIGINT unsigned not null auto_increment, src_time DATETIME(3) not null, src_sid INT unsigned not null, dst_time DATETIME(3) not null, dst_sid INT unsigned not null, primary key(id))`)
 	// select hex(mac) from log;
 	// insert into pf (mac) values (x'000CF15698AD');
 	if err != nil {
@@ -84,7 +82,7 @@ func init() {
 	}
 }
 
-func dbStore(ts time.Time, mac string, hostname string, sid uint32, dir string, height uint32) {
+func dbStore(src_ts time.Time, src_sid uint32, dst_ts time.Time, dst_sid uint32) {
 
 	// ping
 	err := db.Ping()
@@ -101,12 +99,6 @@ func dbStore(ts time.Time, mac string, hostname string, sid uint32, dir string, 
 			print(err)
 			print("\n")
 		}
-	}
-
-	hexmac := strings.Replace(mac, ":", "", -1)
-	nummac, err := strconv.ParseUint(hexmac, 16, 64)
-	if err != nil {
-		panic(err)
 	}
 
 	log.Printf("Storeing %v, %s, %s, %d, %s, %d", ts.Format(layout_db), hexmac, hostname, sid, dir, height)
