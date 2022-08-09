@@ -101,8 +101,8 @@ func dbStore(src_ts time.Time, src_sid uint32, dst_ts time.Time, dst_sid uint32)
 		}
 	}
 
-	log.Printf("Storeing %v, %s, %s, %d, %s, %d", ts.Format(layout_db), hexmac, hostname, sid, dir, height)
-	result, err := db.Exec(`insert into pf(time, mac, hostname, sid, dir, height) values(?, ?, ?, ?, ?, ?)`, ts.Format(layout_db), nummac, hostname, sid, dir, height)
+	log.Printf("Storeing %v, %s, %s, %d, %s, %d", src_ts.Format(layout_db), src_sid, dst_ts.Format(layout_db), dst_sid)
+	result, err := db.Exec(`insert into pf(src_time, src_sid, dst_time, dst_sid) values(?, ?, ?, ?)`, src_ts.Format(layout_db), src_sid, dst_ts.Format(layout_db), dst_sid)
 
 	if err != nil {
 		print("exec error: ")
@@ -126,7 +126,7 @@ func supplyPFlowCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
 		pf := &protoPF.PFlow{}
 		err := proto.Unmarshal(sp.Cdata.Entity, pf)
 		if err == nil {
-			dbStore(pf.Operation[0].Timestamp.AsTime(), uint32(pf.Operation[0].Sid), uint32(pf.Operation[0].Height), pf.Operation[1].Timestamp.AsTime(), uint32(pf.Operation[1].Sid), uint32(pf.Operation[1].Height))
+			dbStore(pf.Operation[0].Timestamp.AsTime(), uint32(pf.Operation[0].Sid), pf.Operation[1].Timestamp.AsTime(), uint32(pf.Operation[1].Sid))
 		} else {
 			log.Printf("Unmarshaling err PF: %v", err)
 		}
