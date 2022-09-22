@@ -12,7 +12,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	api "github.com/synerex/synerex_api"
 	pbase "github.com/synerex/synerex_proto"
 
@@ -41,7 +41,7 @@ var (
 	mbusID          uint64                  = 0 // storage MBus ID
 	storageID       uint64                  = 0 // storageID
 	pfClient        *sxutil.SXServiceClient = nil
-	db              *pgx.Conn
+	db              *pgxpool.Pool
 	db_host         = os.Getenv("POSTGRES_HOST")
 	db_name         = os.Getenv("POSTGRES_DB")
 	db_user         = os.Getenv("POSTGRES_USER")
@@ -57,13 +57,13 @@ func init() {
 	addr := fmt.Sprintf("postgres://%s:%s@%s:5432/%s", db_user, db_pswd, db_host, db_name)
 	print("connecting to " + addr + "\n")
 	var err error
-	db, err = pgx.Connect(ctx, addr)
+	db, err = pgxpool.Connect(ctx, addr)
 	if err != nil {
 		print("connection error: ")
 		log.Println(err)
 		log.Fatal("\n")
 	}
-	defer db.Close(ctx)
+	defer db.Close()
 
 	// ping
 	err = db.Ping(ctx)
@@ -96,7 +96,7 @@ func dbStore(src_ts time.Time, src_sid uint32, dst_ts time.Time, dst_sid uint32)
 		// connect
 		addr := fmt.Sprintf("postgres://%s:%s@%s:5432/%s", db_user, db_pswd, db_host, db_name)
 		print("connecting to " + addr + "\n")
-		db, err = pgx.Connect(ctx, addr)
+		db, err = pgxpool.Connect(ctx, addr)
 		if err != nil {
 			print("connection error: ")
 			log.Println(err)
