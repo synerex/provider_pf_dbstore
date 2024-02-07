@@ -74,7 +74,7 @@ func init() {
 	}
 
 	// create table
-	_, err = db.Exec(ctx, `create table if not exists pf(id BIGSERIAL NOT NULL, src_time TIMESTAMP not null, src_sid INT not null, dst_time TIMESTAMP not null, dst_sid INT not null, primary key(id))`)
+	_, err = db.Exec(ctx, `create table if not exists pf(id BIGSERIAL NOT NULL, src_time TIMESTAMP not null, src_sid INT not null, dst_time TIMESTAMP not null, dst_sid INT not null, primary key(id), constraint pf_pk unique (src_time, src_sid, dst_time, dst_sid))`)
 	// select hex(mac) from log;
 	// insert into pf (mac) values (x'000CF15698AD');
 	if err != nil {
